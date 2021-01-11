@@ -95,6 +95,7 @@ module Segmentado(
 		reg_idr <= {Branch, 	MemRead, MemtoReg, ALUOp, 
 						MemWrite, ALUSrc, RegWrite, inst_fr,
 						se_data, rr_datars1, rr_datars2, pc_fr}; 
+			//------------ID/EX pipeline register execution-------
 	wire Branch_idr; 
 	wire MemRead_idr; 
 	wire MemtoReg_idr; 
@@ -133,28 +134,89 @@ module Segmentado(
 		.S		(ex_PC_branch)
 	); 
 	
-	//Muxes for forawarding 
+	//forawarding 
 	reg [31:0] datars2_forward; 
 	reg [31:0] ALU_datars1;
-	reg [1:0] ALUrs1_forward_flag = 2'b0; 
-	reg [2:0] ALUrs2_forward_flag = 2'b0;	
+	wire [1:0] ALUrs1_forward;
+	wire [1:0] ALUrs2_forward;
 	wire [31:0] alu_result_exr; 
+	wire [31:0] inst_exr; 
+	wire RegWrite_exr;
+	
+	Forwarding FORD_U0(
+		.rs1_idr			(inst_idr[19:15]),
+		.rs2_idr			(inst_idr[24:20]), 
+		.rd_exr			(inst_exr[11:7]),
+		.rd_memr			(inst_memr[11:7]), 
+		.RegWrite_exr	(RegWrite_exr), 
+		.RegWrite_memr	(RegWrite_memr), 
+		.ALU_src1_sel	(ALUrs1_forward),
+		.ALU_src2_sel	(ALUrs2_forward)
+	); 
+	
+	reg [31:0] ALU_datars1_1; 
+	reg [31:0] ALU_datars1_2;
+	//------------Fordwarded data Mux for ALU's data 1-------
 	always @(*) begin 
-		case(ALUrs1_forward_flag)
-			2'b00:	ALU_datars1 <= datars1_idr; 
-			2'b01: 	ALU_datars1 <= wb_data_o;
-			2'b10: 	ALU_datars1 <= alu_result_exr;
-			default: ALU_datars1 <= datars1_idr;
+		case(ALUrs1_forward[0])
+			1'b0:	ALU_datars1_1 <= datars1_idr; 
+			1'b1: ALU_datars1_1 <= alu_result_exr; 
+		endcase
+	end 
+	always @(*) begin 
+		case(ALUrs1_forward[0])
+			1'b0:	ALU_datars1_2 <= wb_data_o; 
+			1'b1: ALU_datars1_2 <= datars1_idr; 
+		endcase
+	end 
+	always @(*) begin 
+		case(ALUrs1_forward[1])
+			1'b0:	ALU_datars1 <= ALU_datars1_1; 
+			1'b1: ALU_datars1 <= ALU_datars1_2; 
 		endcase
 	end
+	/**
 	always @(*) begin 
-		case(ALUrs2_forward_flag)
-			2'b00:	datars2_forward <= datars2_idr; 
-			2'b01: 	datars2_forward <= wb_data_o;
-			2'b10: 	datars2_forward <= alu_result_exr;
-			default: datars2_forward <= datars2_idr;
+		case(ALUrs1_forward)
+			2'b00:	ALU_datars1 <= datars1_idr; 
+			2'b01: 	ALU_datars1 <= alu_result_exr; 
+			2'b10: 	ALU_datars1 <= wb_data_o;
+			2'b11: 	ALU_datars1 <= datars1_idr;
 		endcase
-	end 	 	
+	end
+	**/
+	
+	reg [31:0] ALU_datars2_1; 
+	reg [31:0] ALU_datars2_2;
+	//------------Fordwarded data Mux for ALU's data 1-------
+	always @(*) begin 
+		case(ALUrs2_forward[0])
+			1'b0:	ALU_datars2_1 <= datars2_idr; 
+			1'b1: ALU_datars2_1 <= alu_result_exr; 
+		endcase
+	end 
+	always @(*) begin 
+		case(ALUrs2_forward[0])
+			1'b0:	ALU_datars2_2 <= wb_data_o; 
+			1'b1: ALU_datars2_2 <= datars2_idr; 
+		endcase
+	end 
+	always @(*) begin 
+		case(ALUrs2_forward[1])
+			1'b0:	datars2_forward <= ALU_datars2_1; 
+			1'b1: datars2_forward <= ALU_datars2_2; 
+		endcase
+	end
+	/**
+	always @(*) begin 
+		case(ALUrs2_forward)
+			2'b00:	datars2_forward <= datars2_idr; 
+			2'b01: 	datars2_forward <= alu_result_exr;
+			2'b10: 	datars2_forward <= wb_data_o;
+			2'b11: 	datars2_forward <= datars2_idr;
+		endcase
+	end
+	**/	
 	
 	reg [31:0] ALU_datars2; 
 	always @(*) begin 
@@ -180,6 +242,8 @@ module Segmentado(
 		.ex_zeroflag_o (ex_zero)
 	);
 	//Modificar shift left 1 de PC branch. 
+	
+			//------------EX/MEM pipeline register execution-------
 	reg [101:0] reg_exr; //{Branch_idr, MemRead_idr, MemtoReg_idr, MemWrite_idr, ...
 								//... RegWrite_idr, ex_zero, alu_result, datars2_idr, inst_idr}
 	always @(posedge clk_i) begin 
@@ -192,10 +256,8 @@ module Segmentado(
 	wire MemRead_exr; 
 	wire MemtoReg_exr; 
 	wire MemWrite_exr; 
-	wire RegWrite_exr; 
 	wire zero_exr; 
 	wire [31:0] datars2_exr;	
-	wire [31:0] inst_exr; 
 	assign Branch_exr 		= reg_exr[101]; 
 	assign MemRead_exr 		= reg_exr[100]; 
 	assign MemtoReg_exr		= reg_exr[99]; 	
@@ -224,6 +286,7 @@ module Segmentado(
 	
 	assign PCSrc = Branch_exr&zero_exr; 
 	
+	//------------MEM/WB pipeline register execution-------
 	reg [97:0] reg_memr; //{	MemtoReg_exr, RegWrite_exr, memData_dato, ...
 								//...	alu_result_exr, inst_exr}
 	always @(posedge clk_i) begin 
@@ -256,7 +319,9 @@ module Segmentado(
 	
 endmodule	
 
-
+/**
+		P1-Tudo main testbench 
+**/
 module Segmentado_tb(); 	
 	reg clk_tb; 
 	reg rst_tb; 
