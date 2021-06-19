@@ -1,0 +1,1 @@
+πStache is my first pipelined microprocessor. It is based on many logic structures of µGuelon. Unfortunately, I haven't finished it yet, for example, it has no branch predictor. I will continue with it someday.
